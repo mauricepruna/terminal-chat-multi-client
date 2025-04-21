@@ -4,8 +4,8 @@ import time
 
 import anthropic
 from dotenv import load_dotenv
+from google import genai
 from openai import OpenAI
-from mistralai import Mistral
 
 # Load environment variables from .env file
 load_dotenv()
@@ -22,9 +22,9 @@ except KeyError:
     raise ValueError("ANTHROPIC_API_KEY not found in environment variables")
 
 try:
-    mistral_client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])
+    gemini_client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 except KeyError:
-    raise ValueError("MISTRAL_API_KEY not found in environment variables")
+    raise ValueError("GEMINI_API_KEY not found in environment variables")
 
 # Global variable for stopping the print_dots function
 stop_printing = False
@@ -41,9 +41,9 @@ def chat():
     global stop_printing
     conversation_history_openai = []
     conversation_history_anthropic = []
-    conversation_history_mistral = []
+    conversation_history_gemini = []
 
-    options = {"1": "ChatGPT", "2": "Claude", "3": "Mistral", "4": "All"}
+    options = {"1": "ChatGPT", "2": "Claude", "3": "Gemini", "4": "All"}
     while True:
         print("Please choose an option:")
         for key, value in options.items():
@@ -79,7 +79,7 @@ def chat():
                     conversation_history_anthropic.append(initial_message)
 
                 if number_selected == "3" or number_selected == "4":
-                    conversation_history_mistral.append(initial_message)
+                    conversation_history_gemini.append(initial_message)
 
                 # Start printing dots in a separate thread
                 stop_printing = False
@@ -101,10 +101,13 @@ def chat():
                         messages=conversation_history_anthropic,
                     )
                 if number_selected == "3" or number_selected == "4":
-                    # Send the conversation history to Mistral
-                    response_mistral = mistral_client.chat.complete(
-                        model=os.environ["MISTRAL_MODEL"],
-                        messages=conversation_history_mistral,
+                    # Send the conversation history to Gemini
+                    prompt = "\n".join(
+                        [msg["content"] for msg in conversation_history_gemini]
+                    )
+                    response_gemini = gemini_client.models.generate_content(
+                        model=os.environ["GEMINI_MODEL"],
+                        contents=prompt,
                     )
 
                 # Stop printing dots
@@ -136,15 +139,15 @@ def chat():
                     )
 
                 if number_selected == "3" or number_selected == "4":
-                    # Get Mistral's response
-                    mistral_response = response_mistral.choices[0].message.content
-                    # Print Mistral's response
+                    # Get Gemini's response
+                    gemini_response = response_gemini.text
+                    # Print Gemini's response
                     print(
-                        f"\n================================================\nMistral: {mistral_response}"
+                        f"\n================================================\nGemini: {gemini_response}"
                     )
-                    # Add Mistral's response to conversation history
-                    conversation_history_mistral.append(
-                        {"role": "assistant", "content": mistral_response}
+                    # Add Gemini's response to conversation history
+                    conversation_history_gemini.append(
+                        {"role": "assistant", "content": gemini_response}
                     )
 
             break
