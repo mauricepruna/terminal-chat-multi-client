@@ -1,8 +1,9 @@
 import os
-import readline
 import sys
+import tempfile
 import threading
 import time
+import subprocess
 
 import anthropic
 from dotenv import load_dotenv
@@ -11,12 +12,6 @@ from openai import OpenAI
 
 # Load environment variables from .env file
 load_dotenv()
-
-# Configure readline for better input experience
-readline.set_startup_hook(None)
-readline.parse_and_bind("tab: complete")
-readline.parse_and_bind("set editing-mode emacs")  # Enable emacs-style editing (Ctrl+A, Ctrl+E, etc.)
-readline.parse_and_bind("set bell-style none")     # Disable terminal bell
 
 # Initialize clients
 try:
@@ -47,16 +42,84 @@ def print_dots():
 
 def get_multiline_input(prompt=""):
     """
-    Get multi-line input with proper backspace and editing support.
-    Press Enter twice to finish input, or Ctrl+D to finish.
+    Get multi-line input using a temporary file and text editor for full editing capability.
     """
     print(prompt)
+    print("Choose input method:")
+    print("1. Terminal editor (nano/vim-like)")
+    print("2. Simple line-by-line input")
+    
+    try:
+        choice = input("Enter choice (1 or 2, default: 2): ").strip()
+    except (KeyboardInterrupt, EOFError):
+        return None
+    
+    if choice == "1":
+        return get_editor_input()
+    else:
+        return get_simple_input()
+
+
+def get_editor_input():
+    """
+    Open a temporary file in the user's preferred editor for multi-line input.
+    """
+    # Get the user's preferred editor
+    editor = os.environ.get('EDITOR', 'nano')
+    
+    # Create a temporary file
+    with tempfile.NamedTemporaryFile(mode='w+', suffix='.txt', delete=False) as tmp_file:
+        tmp_file.write("# Enter your message below. Lines starting with # are ignored.\n")
+        tmp_file.write("# Save and exit to send your message.\n\n")
+        tmp_filename = tmp_file.name
+    
+    try:
+        # Open the editor
+        subprocess.run([editor, tmp_filename], check=True)
+        
+        # Read the content back
+        with open(tmp_filename, 'r') as tmp_file:
+            content = tmp_file.read()
+        
+        # Filter out comment lines and empty lines at the start
+        lines = []
+        for line in content.split('\n'):
+            if not line.strip().startswith('#'):
+                lines.append(line)
+        
+        # Remove trailing empty lines
+        while lines and not lines[-1].strip():
+            lines.pop()
+        
+        if not lines:
+            return None
+            
+        return '\n'.join(lines)
+        
+    except subprocess.CalledProcessError:
+        print("Editor was cancelled or failed.")
+        return None
+    except FileNotFoundError:
+        print(f"Editor '{editor}' not found. Please set EDITOR environment variable or use option 2.")
+        return get_simple_input()
+    finally:
+        # Clean up the temporary file
+        try:
+            os.unlink(tmp_filename)
+        except FileNotFoundError:
+            pass
+
+
+def get_simple_input():
+    """
+    Simple line-by-line input with basic editing.
+    """
+    print("Enter your message (press Enter twice to finish, Ctrl+C to cancel):")
     lines = []
     
     try:
         while True:
             try:
-                # Use readline for better input handling
                 line = input()
                 
                 # If empty line, check if we have content to finish
@@ -70,7 +133,7 @@ def get_multiline_input(prompt=""):
                 
             except KeyboardInterrupt:
                 # Handle Ctrl+C - clear current input and start over
-                print("\n[Input cleared - press Ctrl+C again to quit, or start typing your message]")
+                print("\n[Input cleared - start typing again or press Ctrl+C to cancel]")
                 lines = []
                 continue
                 
@@ -107,7 +170,7 @@ def chat():
             number_selected = user_input
             while True:
                 # Get user input with improved handling
-                user_input = get_multiline_input("========================\nYou (press Enter twice to send, Ctrl+C to clear, Ctrl+D to finish):")
+                user_input = get_multiline_input("========================\nEnter your message:")
                 
                 # Handle case where user pressed Ctrl+D with no input
                 if user_input is None:
