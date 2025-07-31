@@ -1,4 +1,6 @@
 import os
+import readline
+import sys
 import threading
 import time
 
@@ -9,6 +11,12 @@ from openai import OpenAI
 
 # Load environment variables from .env file
 load_dotenv()
+
+# Configure readline for better input experience
+readline.set_startup_hook(None)
+readline.parse_and_bind("tab: complete")
+readline.parse_and_bind("set editing-mode emacs")  # Enable emacs-style editing (Ctrl+A, Ctrl+E, etc.)
+readline.parse_and_bind("set bell-style none")     # Disable terminal bell
 
 # Initialize clients
 try:
@@ -37,6 +45,43 @@ def print_dots():
         time.sleep(0.5)
 
 
+def get_multiline_input(prompt=""):
+    """
+    Get multi-line input with proper backspace and editing support.
+    Press Enter twice to finish input, or Ctrl+D to finish.
+    """
+    print(prompt)
+    lines = []
+    
+    try:
+        while True:
+            try:
+                # Use readline for better input handling
+                line = input()
+                
+                # If empty line, check if we have content to finish
+                if line.strip() == "":
+                    if lines:  # If we have content, finish input
+                        break
+                    else:  # If no content yet, continue waiting
+                        continue
+                
+                lines.append(line)
+                
+            except KeyboardInterrupt:
+                # Handle Ctrl+C - clear current input and start over
+                print("\n[Input cleared - press Ctrl+C again to quit, or start typing your message]")
+                lines = []
+                continue
+                
+    except EOFError:
+        # Handle Ctrl+D - finish input
+        if not lines:
+            return None
+    
+    return "\n".join(lines)
+
+
 def chat():
     global stop_printing
     conversation_history_openai = []
@@ -49,21 +94,25 @@ def chat():
         for key, value in options.items():
             print(f"{key}: {value}")
 
-        user_input = input("Enter the number of your choice: ")
+        try:
+            user_input = input("Enter the number of your choice: ")
+        except KeyboardInterrupt:
+            print("\nExiting chat. Goodbye!")
+            sys.exit(0)
+        except EOFError:
+            print("\nExiting chat. Goodbye!")
+            sys.exit(0)
 
         if user_input in options:
             number_selected = user_input
             while True:
-                # Get user input
-                print("========================\nYou: ")
-                lines = []
-                while True:
-                    line = input()
-                    if line.strip() == "":  # Check for an empty line to finish input
-                        break
-                    lines.append(line)
-
-                user_input = "\n".join(lines)
+                # Get user input with improved handling
+                user_input = get_multiline_input("========================\nYou (press Enter twice to send, Ctrl+C to clear, Ctrl+D to finish):")
+                
+                # Handle case where user pressed Ctrl+D with no input
+                if user_input is None:
+                    print("\nExiting chat. Goodbye!")
+                    break
 
                 # Check if the user wants to quit
                 if user_input.lower() == "quit":
